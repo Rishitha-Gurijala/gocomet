@@ -81,13 +81,13 @@ async function validateDriver(req, res) {
     .promise()
     .query("SELECT * FROM drivers where id = ?", [id]);
   let user = users[0];
-  if (user.id == id && user.password !== password) {
+  if (user && user.id == id && user.password !== password) {
     return res.status(200).json({ message: "incorrect" });
   }
-  if (user.id == id && user.password == password) {
+  if (user && user.id == id && user.password == password) {
     return res.status(200).json({ message: "valid" });
   }
-  return res.status(500).json({
+  return res.status(200).json({
     message: "invalid",
   });
 }
