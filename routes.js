@@ -1,8 +1,7 @@
-const { play, getPlayerInfo } = require("./controllers.js");
+const { createRide } = require("./controllers.js");
 
 function getRoutes() {
-  app.post("/play", play);
-  app.get("/player/:id", getPlayerInfo);
+  app.post("/v1/rides", createRide);
 }
 
 module.exports = {
