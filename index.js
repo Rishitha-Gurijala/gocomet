@@ -1,20 +1,7 @@
-let express = require("express");
-global.app = express();
-app.use(express.json());
+const db = require('./mysqldb');
 
-const dotenv = require("dotenv");
-dotenv.config();
-const PORT = process.env.PORT;
-
-const { establishRedis } = require("./utility/redisConnect.js");
-const { getRoutes } = require("./routes.js");
-
-establishRedis();
-getRoutes();
-
-app.listen(PORT);
-console.log("Listening on port 3000");
-
-// setTimeout(async () => {
-//   await sample();
-// }, 2 * 1000); // 15 min
+// simple query
+db.query('SELECT 1 + 1 AS result', (err, rows) => {
+  if (err) throw err;
+  console.log('Result:', rows[0].result);
+});
