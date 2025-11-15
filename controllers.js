@@ -42,11 +42,21 @@ async function getPlayerInfo(req, res) {
 
 async function createRide(req, res) {
   let body = req.body;
+  let statuses = ["WAITING"];
   if (body && body.userId) {
-    console.log("dshbj");
-    await publishMessage(body);
+    let [users] = await db
+      .promise()
+      .query("SELECT userId  FROM rides where userId = ? and status in (?)", [
+        body.userId,
+        statuses,
+      ]);
 
-    return res.status(200).json({ status: "queued" });
+    if (!users.length) {
+      await publishMessage(body);
+      return res.status(200).json({ status: "queued" });
+    } else {
+      return res.status(200).json({ status: "cannot book another ride" });
+    }
   } else {
     return res.status(500).json({
       message: "Please enter valid Inputs!!",
@@ -62,10 +72,10 @@ async function validateUser(req, res) {
     .promise()
     .query("SELECT userId,password  FROM users where userId = ?", [id]);
   let user = users[0];
-  if (user.userId == id && user.password !== password) {
+  if (user && user.userId == id && user.password !== password) {
     return res.status(200).json({ message: "incorrect" });
   }
-  if (user.userId == id && user.password == password) {
+  if (user && user.userId == id && user.password == password) {
     return res.status(200).json({ message: "valid" });
   }
   return res.status(500).json({
@@ -85,7 +95,7 @@ async function validateDriver(req, res) {
     return res.status(200).json({ message: "incorrect" });
   }
   if (user && user.id == id && user.password == password) {
-    return res.status(200).json({ message: "valid" });
+    return res.status(200).json({ message: "valid", name: user.name });
   }
   return res.status(200).json({
     message: "invalid",
@@ -163,6 +173,10 @@ async function createDriver(req, res) {
         password,
       ]);
 
+    const [update] = await db
+      .promise()
+      .query(`UPDATE drivers SET users = "[]" WHERE id = ${parsedDriverId}`);
+
     if (result.affectedRows === 1) {
       return res.status(201).json({
         success: true,
@@ -200,6 +214,35 @@ async function listUsers(req, res) {
   }
 }
 
+async function updateDriverLocation(req, res) {
+  try {
+    let { latitude, longitude, driverId } = req.body;
+    const [update] = await db
+      .promise()
+      .query(
+        `UPDATE drivers SET latitude = ${latitude}, longitude = ${longitude}, is_available = "true"  WHERE id = ${driverId}`,
+      );
+    if (update?.affectedRows > 0) {
+      return res.status(200).json({
+        message: "Driver location updated!!",
+        success: true,
+      });
+    } else {
+      return res.status(200).json({
+        message: "No affected rows",
+        success: true,
+      });
+    }
+  } catch (error) {
+    console.error("Error fetching users:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error fetching users from database",
+      error: error.message,
+    });
+  }
+}
+
 async function publishMessage(message) {
   try {
     const connection = await amqp.connect(RABBITMQ_URL);
@@ -225,4 +268,5 @@ module.exports = {
   listUsers,
   createUser,
   createDriver,
+  updateDriverLocation,
 };
