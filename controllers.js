@@ -58,14 +58,34 @@ async function validateUser(req, res) {
   let id = req.params.id;
   id = parseInt(id);
   let password = req.params.password;
-  let [users] = await db.promise().query("SELECT * FROM users");
-  for (let user of users) {
-    if (user.userId == id && user.password !== password) {
-      return res.status(200).json({ message: "incorrect" });
-    }
-    if (user.userId == id && user.password == password) {
-      return res.status(200).json({ message: "valid" });
-    }
+  let [users] = await db
+    .promise()
+    .query("SELECT userId,password  FROM users where userId = ?", [id]);
+  let user = users[0];
+  if (user.userId == id && user.password !== password) {
+    return res.status(200).json({ message: "incorrect" });
+  }
+  if (user.userId == id && user.password == password) {
+    return res.status(200).json({ message: "valid" });
+  }
+  return res.status(500).json({
+    message: "invalid",
+  });
+}
+
+async function validateDriver(req, res) {
+  let id = req.params.id;
+  id = parseInt(id);
+  let password = req.params.password;
+  let [users] = await db
+    .promise()
+    .query("SELECT * FROM drivers where id = ?", [id]);
+  let user = users[0];
+  if (user.id == id && user.password !== password) {
+    return res.status(200).json({ message: "incorrect" });
+  }
+  if (user.id == id && user.password == password) {
+    return res.status(200).json({ message: "valid" });
   }
   return res.status(500).json({
     message: "invalid",
@@ -97,6 +117,51 @@ async function createUser(req, res) {
         "INSERT INTO users (userId, userName, password) VALUES (?, ?, ?)",
         [parsedUserId, name, password],
       );
+
+    if (result.affectedRows === 1) {
+      return res.status(201).json({
+        success: true,
+        message: "User created successfully",
+      });
+    } else {
+      throw new Error("Failed to create user");
+    }
+  } catch (error) {
+    console.error("Error creating user:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error creating user",
+      error: error.message,
+    });
+  }
+}
+
+async function createDriver(req, res) {
+  try {
+    let { driverId, password, name } = req.body;
+    if (!driverId) {
+      driverId = generateFourDigitRandom();
+    }
+    const parsedDriverId = parseInt(driverId);
+
+    const [existingUsers] = await db
+      .promise()
+      .query("SELECT * FROM drivers WHERE id = ?", [parsedDriverId]);
+
+    if (existingUsers.length > 0) {
+      return res.status(201).json({
+        success: true,
+        message: "User with this ID already exists",
+      });
+    }
+
+    const [result] = await db
+      .promise()
+      .query("INSERT INTO drivers (id, name, password) VALUES (?, ?, ?)", [
+        parsedDriverId,
+        name,
+        password,
+      ]);
 
     if (result.affectedRows === 1) {
       return res.status(201).json({
@@ -156,6 +221,8 @@ module.exports = {
   createRide,
   getPlayerInfo,
   validateUser,
+  validateDriver,
   listUsers,
   createUser,
+  createDriver,
 };
