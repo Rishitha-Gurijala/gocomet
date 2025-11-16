@@ -1,5 +1,11 @@
-const { mongoConnect } = require("./utility/mongoConnect.js");
-const { establishRedis } = require("./utility/redisConnect.js");
+var express = require("express");
+var Razorpay = require("razorpay");
+var cors = require("cors");
+var crypto = require("crypto");
+var dist = require("geo-distance-js");
+
+const { prices } = require("./priceChart.js");
+
 let amqp = require("amqplib");
 const dotenv = require("dotenv");
 const db = require("./mysqldb");
@@ -7,42 +13,45 @@ dotenv.config();
 const RABBITMQ_URL = process.env.RABBITMQ_URL;
 const queue = process.env.queue;
 
+const razorpay = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_KEY_SECRET,
+});
+
 function generateFourDigitRandom() {
   return Math.floor(1000 + Math.random() * 9000);
 }
 
-async function getPlayerInfo(req, res) {
-  let db = await mongoConnect();
-  let id = req?.params?.id;
-  if (!id) {
-    return res.status(500).json({
-      message: "Please enter valid Parameters!!",
-    });
+async function getUserRide(req, res) {
+  let userId = req.params.userId;
+  let [users] = await db
+    .promise()
+    .query("SELECT *  FROM rides where userId = ?", [userId]);
+  return res.status(200).json({
+    data: users,
+  });
+}
+
+async function getAllRides(req, res) {
+  let driverId = req.params.driverId;
+  let [users] = await db
+    .promise()
+    .query("SELECT *  FROM drivers where id = ?", [driverId]);
+  let userIds = [];
+  if (users && users.length) {
+    userIds = users[0].users;
   }
-  if (!client) {
-    establishRedis();
-  }
-  let doc = await client.get(id);
-  if (!doc) {
-    doc = await db.collection("players").findOne({ playerId: id });
-    doc = JSON.stringify(doc);
-    if (!client) {
-      establishRedis();
-    }
-    await client.set(id, doc, { EX: 60 });
-  }
-  doc = JSON.parse(doc);
-  if (!doc) {
-    doc = {
-      message: "Player not found!!",
-    };
-  }
-  return res.status(200).json(doc);
+  let [rides] = await db
+    .promise()
+    .query("SELECT *  FROM rides where userId in (?)", [userIds]);
+  return res.status(200).json({
+    data: rides,
+  });
 }
 
 async function createRide(req, res) {
   let body = req.body;
-  let statuses = ["WAITING"];
+  let statuses = ["WAITING", "IN_PROGRESS"];
   if (body && body.userId) {
     let [users] = await db
       .promise()
@@ -243,6 +252,99 @@ async function updateDriverLocation(req, res) {
   }
 }
 
+async function updateRideInfo(req, res) {
+  try {
+    let { rideId, driverId } = req.body;
+    const [update] = await db
+      .promise()
+      .query(
+        `UPDATE drivers SET is_available = "false"  WHERE id = ${driverId}`,
+      );
+    const [rideUpdate] = await db
+      .promise()
+      .query(
+        `UPDATE rides SET status = "IN_PROGRESS", driverId = ${driverId}  WHERE id = ${rideId}`,
+      );
+    if (rideUpdate?.affectedRows > 0) {
+      return res.status(200).json({
+        message: "Ride Info Updated Successfully",
+        success: true,
+      });
+    } else {
+      return res.status(200).json({
+        message: "No affected rows",
+        success: true,
+      });
+    }
+  } catch (error) {
+    console.error("Error fetching users:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error fetching users from database",
+      error: error.message,
+    });
+  }
+}
+
+async function endTrip(req, res) {
+  try {
+    let { rideId, driverId } = req.body;
+    const [update] = await db
+      .promise()
+      .query(
+        `UPDATE drivers SET is_available = "true"  WHERE id = ${driverId}`,
+      );
+    let [rides] = await db
+      .promise()
+      .query("SELECT *  FROM rides where id = ?", [rideId]);
+
+    let ride = rides[0];
+
+    let distance = dist.getDistance(
+      ride.pickup_lat,
+      ride.pickup_long,
+      ride.dropoff_lat,
+      ride.dropoff_long,
+    );
+    distance = Math.round(distance / 1000);
+    let fare = 0;
+
+    for (let obj of prices) {
+      if (distance > obj.start && distance < obj.end) {
+        fare = obj.price;
+        break;
+      }
+    }
+    fare = !fare ? 750 : fare;
+
+    const [rideUpdate] = await db
+      .promise()
+      .query(
+        `UPDATE rides SET status = "FINISHED", fare=${fare}  WHERE id = ${rideId}`,
+      );
+
+    if (rideUpdate?.affectedRows > 0) {
+      return res.status(200).json({
+        message: "Ride finished Successfully",
+        success: true,
+        fare: fare,
+      });
+    } else {
+      return res.status(200).json({
+        message: "No affected rows",
+        success: true,
+      });
+    }
+  } catch (error) {
+    console.error("Error fetching users:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error fetching users from database",
+      error: error.message,
+    });
+  }
+}
+
 async function publishMessage(message) {
   try {
     const connection = await amqp.connect(RABBITMQ_URL);
@@ -262,11 +364,14 @@ async function publishMessage(message) {
 
 module.exports = {
   createRide,
-  getPlayerInfo,
   validateUser,
   validateDriver,
   listUsers,
   createUser,
   createDriver,
   updateDriverLocation,
+  updateRideInfo,
+  endTrip,
+  getUserRide,
+  getAllRides,
 };
