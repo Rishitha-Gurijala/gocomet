@@ -1,7 +1,4 @@
-var express = require("express");
-var Razorpay = require("razorpay");
-var cors = require("cors");
-var crypto = require("crypto");
+
 var dist = require("geo-distance-js");
 
 const { prices } = require("./priceChart.js");
@@ -12,11 +9,6 @@ const db = require("./mysqldb");
 dotenv.config();
 const RABBITMQ_URL = process.env.RABBITMQ_URL;
 const queue = process.env.queue;
-
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET,
-});
 
 function generateFourDigitRandom() {
   return Math.floor(1000 + Math.random() * 9000);

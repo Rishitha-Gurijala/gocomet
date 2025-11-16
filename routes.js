@@ -12,11 +12,13 @@ const {
 } = require("./controllers.js");
 
 function getRoutes() {
+  // user
   app.get("/v1/validateUser/:id/:password", validateUser);
   app.post("/v1/createUser", createUser);
   app.post("/v1/rides", createRide);
   app.get("/v1/viewRide/:userId", getUserRide);
 
+  //driver
   app.get("/v1/validateDriver/:id/:password", validateDriver);
   app.post("/v1/createDriver", createDriver);
   app.post("/v1/updateDriverLocation", updateDriverLocation);
