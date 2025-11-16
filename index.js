@@ -1,3 +1,4 @@
+require('newrelic');
 let express = require("express");
 global.app = express();
 app.use(express.json());
